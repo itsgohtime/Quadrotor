@@ -27,7 +27,7 @@
 #define max_pitch_angle 45
 #define hb_timeout 0.25
 
-#define PWM_MAX 1300
+#define PWM_MAX 1500
 #define PWM_MIN 1000
 #define frequency 25000000.0
 #define LED0 0x6			
@@ -36,9 +36,11 @@
 #define LED0_OFF_L 0x8		
 #define LED0_OFF_H 0x9		
 #define LED_MULTIPLYER 4
-#define NEUTRAL_PWM 1100	
+#define NEUTRAL_PWM 1250	
 
-#define Pitch_P 5
+#define Pitch_P 10 //10
+#define Pitch_D 1//1
+#define Pitch_I 0.05
 
 enum Ascale
 {
@@ -96,6 +98,7 @@ int last_heartbeat = 0;
 long last_time = 0;
 
 int pwm;
+float error_sum;
 
 struct Keyboard
 {
@@ -400,22 +403,25 @@ void update_filter(float A)
 
 void pid_update()
 {
-    float motor1 = NEUTRAL_PWM + pitch_angle * Pitch_P;
-    float motor2 = NEUTRAL_PWM - pitch_angle * Pitch_P;
-    printf("Accel Pitch: %f, CF Pitch: %f Low: %f High: %f\n", pitch_accel, pitch_angle, motor1, motor2);
+    error_sum += pitch_angle;
+    float motor1 = NEUTRAL_PWM + pitch_angle * Pitch_P + imu_data[0] * Pitch_D + error_sum * Pitch_I;
+    float motor2 = NEUTRAL_PWM - pitch_angle * Pitch_P - imu_data[0] * Pitch_D - error_sum * Pitch_I;
 
+    // printf("PitchValue %f Gyro %f Motor1 %f Motor2 %f\n", pitch_angle, imu_data[0], motor1, motor2);
+    printf("Pitch_Filter %f Pitch_Accel %f Gyro %f Motor1 %f Motor2 %f\n", pitch_angle, pitch_accel, imu_data[0], motor1, motor2);
     if (pitch_angle > 0){
         // 0 and 2 stronger if pitch positive
-        set_PWM(0, fminf(NEUTRAL_PWM + pitch_angle * Pitch_P, PWM_MAX));
-        set_PWM(2, fminf(NEUTRAL_PWM + pitch_angle * Pitch_P, PWM_MAX));
+        set_PWM(0, fminf(NEUTRAL_PWM + pitch_angle * Pitch_P + imu_data[0] * Pitch_D + error_sum * Pitch_I, PWM_MAX));
+        set_PWM(2, fminf(NEUTRAL_PWM + pitch_angle * Pitch_P + imu_data[0] * Pitch_D + error_sum * Pitch_I, PWM_MAX));
         // 1 and 2 anti stronger 
-        set_PWM(1, fmaxf(NEUTRAL_PWM - pitch_angle * Pitch_P, PWM_MIN));
-        set_PWM(3, fmaxf(NEUTRAL_PWM - pitch_angle * Pitch_P, PWM_MIN));
+        set_PWM(1, fmaxf(NEUTRAL_PWM - pitch_angle * Pitch_P - imu_data[0] * Pitch_D - error_sum * Pitch_I, PWM_MIN));
+        set_PWM(3, fmaxf(NEUTRAL_PWM - pitch_angle * Pitch_P - imu_data[0] * Pitch_D - error_sum * Pitch_I, PWM_MIN));
     } else {
-        set_PWM(0, fmaxf(NEUTRAL_PWM + pitch_angle * Pitch_P, PWM_MIN));
-        set_PWM(2, fmaxf(NEUTRAL_PWM + pitch_angle * Pitch_P, PWM_MIN));
-        set_PWM(1, fminf(NEUTRAL_PWM - pitch_angle * Pitch_P, PWM_MAX));
-        set_PWM(3, fminf(NEUTRAL_PWM - pitch_angle * Pitch_P, PWM_MAX));
+        set_PWM(0, fmaxf(NEUTRAL_PWM + pitch_angle * Pitch_P + imu_data[0] * Pitch_D + error_sum * Pitch_I, PWM_MIN));
+        set_PWM(2, fmaxf(NEUTRAL_PWM + pitch_angle * Pitch_P + imu_data[0] * Pitch_D + error_sum * Pitch_I, PWM_MIN));
+
+        set_PWM(1, fminf(NEUTRAL_PWM - pitch_angle * Pitch_P - imu_data[0] * Pitch_D - error_sum * Pitch_I, PWM_MAX));
+        set_PWM(3, fminf(NEUTRAL_PWM - pitch_angle * Pitch_P - imu_data[0] * Pitch_D - error_sum * Pitch_I, PWM_MAX));
     }
 
     // float low_motors = min(NEUTRAL_PWM + abs(roll_angle) * Pitch_P, PWM_MAX);
@@ -537,11 +543,11 @@ int setup_imu()
         // c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG2);
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c & ~0x0F); //
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c | 0x00);
-        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
+        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x04); // 20hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x03); // 41hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x02); // 92hz
-        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x00); // 460hz
+        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x00); // 460hz
         c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG2);
         printf("C is %d", c);
     }
