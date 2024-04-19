@@ -39,8 +39,8 @@
 #define NEUTRAL_PWM 1250	
 
 #define Pitch_P 10 //10
-#define Pitch_D 1//1
-#define Pitch_I 0.05
+#define Pitch_D 1.25 //1
+#define Pitch_I 0.045
 
 enum Ascale
 {
@@ -408,7 +408,7 @@ void pid_update()
     float motor2 = NEUTRAL_PWM - pitch_angle * Pitch_P - imu_data[0] * Pitch_D - error_sum * Pitch_I;
 
     // printf("PitchValue %f Gyro %f Motor1 %f Motor2 %f\n", pitch_angle, imu_data[0], motor1, motor2);
-    printf("Pitch_Filter %f Pitch_Accel %f Gyro %f Motor1 %f Motor2 %f\n", pitch_angle, pitch_accel, imu_data[0], motor1, motor2);
+    printf("Pitch_Filter %f Pitch_Accel %f Pitch_Gyro %f Motor1 %f Motor2 %f\n", pitch_angle, pitch_accel, gyro_pitch, motor1, motor2);
     if (pitch_angle > 0){
         // 0 and 2 stronger if pitch positive
         set_PWM(0, fminf(NEUTRAL_PWM + pitch_angle * Pitch_P + imu_data[0] * Pitch_D + error_sum * Pitch_I, PWM_MAX));
