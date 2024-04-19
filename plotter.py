@@ -38,6 +38,6 @@ def plot_data(load_file, save_file, title, x, y):
 plot_data(
     load_file='week4_data/stretchmilestone.txt',
     save_file='week4_data/stretchmilestone.png',
-    title="Milestone 4",
+    title="Stretch Milestone",
     x="t",
     y="")
