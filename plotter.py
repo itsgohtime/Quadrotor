@@ -21,6 +21,8 @@ def plot_data(load_file, save_file, title, x, y):
     for i in [0, 1]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.title(title)
+    plt.xlim([0, len(content)])
+    plt.grid()
     plt.legend()
     plt.grid()
     
