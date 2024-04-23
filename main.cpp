@@ -27,7 +27,6 @@
 #define max_pitch_angle 45
 #define hb_timeout 0.25
 
-
 #define PWM_MAX 1500
 #define PWM_MIN 1000
 #define frequency 25000000.0
@@ -42,14 +41,10 @@
 #define Pitch_P 0.0 //8
 #define Pitch_D 0.0 //1.5
 #define Pitch_I 0.0 //0.03
-#define Roll_P 7 //10
-#define Roll_D 1.5 //1
+#define Roll_P 7.0
+#define Roll_D 1.5
 #define Roll_I 0.03
-
-int kb_version = 0;
-int THRUST = 1250;
-float desired_pitch  = 0;
-float desired_roll = 0;
+#define Yaw_P 0.0
 
 enum Ascale
 {
@@ -93,6 +88,7 @@ float imu_data[6]; // gyro xyz, accel xyz
 long time_curr;
 long time_prev;
 struct timespec te;
+
 float yaw = 0;
 float pitch_angle = 0;
 float roll_angle = 0;
@@ -105,14 +101,17 @@ float pitch_accel = 0;
 
 int last_heartbeat = 0;
 long last_time = 0;
+int kb_version = 0;
 
 int pwm;
+
+int THRUST = 1250;
+float desired_pitch  = 0;
+float desired_roll = 0;
 float pitch_error_sum;
 float roll_error_sum;
 
 char state = 'p';
-
-// FILE *fptr = fopen("sample.txt", "w"); 
 
 struct Keyboard
 {
@@ -122,6 +121,8 @@ struct Keyboard
 };
 Keyboard *shared_memory;
 int run_program = 1;
+
+// FILE *fptr = fopen("sample.txt", "w"); 
 
 int main(int argc, char *argv[])
 {
@@ -270,7 +271,6 @@ void trap(int signal)
     run_program = 0;
     motors_off();
     // fclose(fptr);
-
 }
 
 void calibrate_imu()
@@ -445,33 +445,29 @@ void pid_update()
     set_PWM(0,
     fmax(fminf(THRUST 
         + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum
-        + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum,
+        + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum
+        - imu[2] * Yaw_P,
     PWM_MAX), PWM_MIN));
 
     set_PWM(2,
     fmax(fminf(THRUST
         + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum
-        - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum,
+        - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum
+        + imu[2] * Yaw_P,
     PWM_MAX), PWM_MIN));
     
     set_PWM(1, 
     fmax(fminf(THRUST 
         - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum
-        + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum,
+        + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum
+        + imu[2] * Yaw_P,
     PWM_MAX), PWM_MIN));
     
     set_PWM(3, fmax(fminf(THRUST
         - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum
-        - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum,
+        - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum
+        - imu[2] * Yaw_P,
     PWM_MAX), PWM_MIN));
-
-    // float low_motors = min(NEUTRAL_PWM + abs(roll_angle) * Pitch_P, PWM_MAX);
-    // float high_motors = max(NEUTRAL_PWM - abs(roll_angle) * Pitch_P, PWM_MIN);
-    // if (roll_angle > 0) {
-
-    // } else {
-
-    // }
 }
 
 void safety_check()
