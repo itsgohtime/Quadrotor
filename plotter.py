@@ -17,8 +17,8 @@ def plot_data(load_file, save_file, title, x, y):
            data[i].append(float(split_l[1 + 2*i]))
 
     plt.figure(figsize=(10,10))
-    # plt.subplot(211)
-    for i in [0, 1]:
+    plt.subplot(211)
+    for i in [1, 2]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.title(title)
     plt.xlim([0, len(content)])
@@ -26,10 +26,12 @@ def plot_data(load_file, save_file, title, x, y):
     plt.legend()
     plt.grid()
     
-    # plt.subplot(212)
-    # for i in [3, 4]:
-    #     plt.plot(range(len(content)), data[i], label=labels[i])
-    # plt.legend()
+    plt.subplot(212)
+    for i in [0]:
+        plt.plot(range(len(content)), data[i], label=labels[i])
+        
+    plt.axhline(y=0, color='r', linestyle='-')
+    plt.legend()
 
     plt.xlabel(x)
     plt.ylabel(y)
@@ -37,8 +39,8 @@ def plot_data(load_file, save_file, title, x, y):
     plt.savefig(save_file)
 
 plot_data(
-    load_file='week5_data/milestone2.txt',
-    save_file='week5_data/milestone2.png',
-    title="milestone2",
+    load_file='week5_data/milestone5.txt',
+    save_file='week5_data/milestone5.png',
+    title="milestone5",
     x="t",
     y="")
