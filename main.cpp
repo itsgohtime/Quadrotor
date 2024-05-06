@@ -27,7 +27,7 @@
 #define max_pitch_angle 45
 #define hb_timeout 0.25
 
-#define PWM_MAX 1500
+#define PWM_MAX 2500
 #define PWM_MIN 1000
 #define frequency 25000000.0
 #define LED0 0x6
@@ -36,14 +36,16 @@
 #define LED0_OFF_L 0x8
 #define LED0_OFF_H 0x9
 #define LED_MULTIPLYER 4
-#define NEUTRAL_PWM 1250
+#define NEUTRAL_PWM 1700
 
-#define Pitch_P 0 // 8
-#define Pitch_D 0 // 1.5
-#define Pitch_I 0 // 0.03
-#define Roll_P 0  // 7
-#define Roll_D 0  // 1.4
-#define Roll_I 0  // 0.03
+#define Pitch_P 15.0// 8
+#define Pitch_I 0.02 // 0.03
+#define Pitch_D 1.35 // 1.5
+
+#define Roll_P 8.0 // 7
+#define Roll_I 0.05 // 0.03
+#define Roll_D 0.9 // 1.4
+
 #define Yaw_P 0.8
 
 enum Ascale
@@ -122,7 +124,7 @@ struct Keyboard
 Keyboard *shared_memory;
 int run_program = 1;
 
-FILE *fptr = fopen("week5_data/milestone5.txt", "w");
+FILE *fptr = fopen("week6_data/milestone2.txt", "w");
 
 int main(int argc, char *argv[])
 {
@@ -147,7 +149,7 @@ int main(int argc, char *argv[])
         {
             read_imu();
             // printf("Gyro (xyz): %10.5f %10.5f %10.5f RP: %10.5f %10.5f \n", imu_data[0], imu_data[1], imu_data[2], roll_angle, pitch_angle);
-            update_filter(0.2);
+            update_filter(0.1);
             pid_update();
         }
         else if (state == 'p')
@@ -160,7 +162,7 @@ int main(int argc, char *argv[])
             calibrate_imu();
         }
     }
-    // fclose(fptr);
+    fclose(fptr);
     motors_off();
 }
 
@@ -273,7 +275,7 @@ void trap(int signal)
     printf("ending program\n\r");
     run_program = 0;
     motors_off();
-    // fclose(fptr);
+    fclose(fptr);
 }
 
 void calibrate_imu()
@@ -300,7 +302,7 @@ void calibrate_imu()
     pitch_calibration = pitch_sum / c_iters;
     accel_z_calibration = 0;
 
-    printf("calibration complete, %f %f %f %f %f %f\n\r", x_gyro_calibration, y_gyro_calibration, z_gyro_calibration, roll_calibration, pitch_calibration, accel_z_calibration);
+    // printf("calibration complete, %f %f %f %f %f %f\n\r", x_gyro_calibration, y_gyro_calibration, z_gyro_calibration, roll_calibration, pitch_calibration, accel_z_calibration);
 }
 
 void read_imu()
@@ -432,11 +434,24 @@ void update_filter(float A)
 void pid_update()
 {
 
+    fprintf(fptr, "Roll_DpS %f Roll_Integrated %f Roll_Accel %f Roll_CF %f Desired_Roll %f Pitch_DpS %f Pitch_Integrated %f Pitch_Accel %f Pitch_CF %f Desired_Pitch %f\n", imu_data[1], gyro_roll, roll_accel, roll_angle, desired_roll, imu_data[0], gyro_pitch, pitch_accel, pitch_angle, desired_pitch);
     float pitch_error = pitch_angle - desired_pitch;
     pitch_error_sum += pitch_error * Pitch_I;
+    if (pitch_error_sum > 200.0) {
+        pitch_error_sum = 200.0;
+    } else if (pitch_error_sum < -200.0) {
+        pitch_error_sum = -200.0;
+    }
+    printf("DesiredPitch: %f DesiredRoll: %f ActualPitch: %f DesiredRoll: %f\n", desired_pitch, desired_roll, pitch_angle, roll_angle);
 
     float roll_error = roll_angle - desired_roll;
     roll_error_sum += roll_error * Roll_I;
+
+    if (roll_error_sum > 200.0) {
+        roll_error_sum = 200.0;
+    } else if (roll_error_sum < -200.0) {
+        roll_error_sum = -200.0;
+    }
 
     float motor1 = THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + imu_data[2] * Yaw_P;
     float motor2 = THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - imu_data[2] * Yaw_P;
@@ -560,38 +575,38 @@ void keyboard_feedback()
         {
             state = 'c';
         }
-        else if (keyboard.key_press == '+')
+        else if (keyboard.key_press == '=')
         {
-            THRUST += 50;
+            THRUST += 10;
             // printf("Thrust is %d\n", THRUST);
         }
         else if (keyboard.key_press == '-')
         {
-            THRUST -= 50;
+            THRUST -= 10;
             // printf("Thrust is %d\n", THRUST);
         }
         else if (keyboard.key_press == 'w')
         {
             // up arrow
-            desired_pitch += 1;
+            desired_pitch += 0.5;
             // printf("Pitch is %f\n", desired_pitch);
         }
         else if (keyboard.key_press == 's')
         {
             // down arrow
-            desired_pitch -= 1;
+            desired_pitch -= 0.5;
             // printf("Pitch is %f\n", desired_pitch);
         }
         else if (keyboard.key_press == 'd')
         {
             // right arrow
-            desired_roll += 1;
+            desired_roll += 0.5;
             // printf("Roll is %f\n", desired_roll);
         }
         else if (keyboard.key_press == 'a')
         {
             // left arrow
-            desired_roll -= 1;
+            desired_roll -= 0.5;
             // printf("Roll is %f\n", desired_roll);
         }
     }
@@ -628,6 +643,19 @@ int setup_imu()
         wiringPiI2CWriteReg8(imu, GYRO_CONFIG, c & ~0xE0);
         wiringPiI2CWriteReg8(imu, GYRO_CONFIG, c & ~0x18);
         wiringPiI2CWriteReg8(imu, GYRO_CONFIG, c | Gscale << 3);
+        // c = wiringPiI2CReadReg8(imu, GYRO_CONFIG);
+        // printf("gyro config %d\n", c);
+        
+
+        c = wiringPiI2CReadReg8(imu, CONFIG);
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x06); // 5hz
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x04); // 20hz
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x03); // 41hz
+        wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz  
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x01); // 184hz 
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x00); // 250hz  
+
+
         c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG);
         wiringPiI2CWriteReg8(imu, ACCEL_CONFIG, c & ~0xE0); // Clear self-test bits [7:5]
         wiringPiI2CWriteReg8(imu, ACCEL_CONFIG, c & ~0x18); // Clear AFS bits [4:3]
@@ -635,8 +663,8 @@ int setup_imu()
         // c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG2);
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c & ~0x0F); //
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c | 0x00);
-        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
-        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x04); // 20hz
+        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
+        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x04); // 20hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x03); // 41hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x02); // 92hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x00); // 460hz
