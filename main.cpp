@@ -25,9 +25,9 @@
 #define max_gyro_rate 300
 #define max_roll_angle 45
 #define max_pitch_angle 45
-#define hb_timeout 0.25
+#define hb_timeout 0.5
 
-#define PWM_MAX 2500
+#define PWM_MAX 1600
 #define PWM_MIN 1000
 #define frequency 25000000.0
 #define LED0 0x6
@@ -36,17 +36,19 @@
 #define LED0_OFF_L 0x8
 #define LED0_OFF_H 0x9
 #define LED_MULTIPLYER 4
-#define NEUTRAL_PWM 1700
+#define NEUTRAL_PWM 1350
 
-#define Pitch_P 15.0// 8
-#define Pitch_I 0.02 // 0.03
-#define Pitch_D 1.35 // 1.5
+#define Pitch_P 13.5// 8
+#define Pitch_I 0.03 // 0.03
+#define Pitch_D 1.2 // 1.5
 
 #define Roll_P 8.0 // 7
 #define Roll_I 0.05 // 0.03
-#define Roll_D 0.9 // 1.4
+#define Roll_D 1.1 // 1.4
 
-#define Yaw_P 0.8
+#define Yaw_P 1.5
+
+#define MAX_THRUST 75
 
 enum Ascale
 {
@@ -103,28 +105,36 @@ float pitch_accel = 0;
 
 int last_heartbeat = 0;
 long last_time = 0;
-int kb_version = -1;
+int joy_version = -1;
 
 int pwm;
 
 int THRUST = 1250;
 float desired_pitch = 0;
 float desired_roll = 0;
+float desired_yaw = 0;
 float pitch_error_sum;
 float roll_error_sum;
 
 char state = 'p';
 
-struct Keyboard
+struct Data
 {
-    char key_press;
-    int heartbeat;
-    int version;
+	int key0;
+    int key1;
+    int key2;
+    int key3;
+	int pitch;
+	int roll;
+	int yaw;
+	int thrust;
+  int sequence_num;
 };
-Keyboard *shared_memory;
+
+Data *shared_memory;
 int run_program = 1;
 
-FILE *fptr = fopen("week6_data/milestone2.txt", "w");
+FILE *fptr = fopen("week7_data/tuning.txt", "w");
 
 int main(int argc, char *argv[])
 {
@@ -144,12 +154,12 @@ int main(int argc, char *argv[])
         keyboard_feedback();
         safety_check();
 
-        Keyboard keyboard = *shared_memory;
+        Data joy_data = *shared_memory;
         if (state == 'u')
         {
             read_imu();
             // printf("Gyro (xyz): %10.5f %10.5f %10.5f RP: %10.5f %10.5f \n", imu_data[0], imu_data[1], imu_data[2], roll_angle, pitch_angle);
-            update_filter(0.1);
+            update_filter(0.2);
             pid_update();
         }
         else if (state == 'p')
@@ -158,6 +168,7 @@ int main(int argc, char *argv[])
         }
         else if (state == 'c')
         {
+            printf("Calibrating\n");
             motors_off();
             calibrate_imu();
         }
@@ -260,7 +271,7 @@ void setup_keyboard()
     /* Allocate a shared memory segment. */
     segment_id = shmget(smhkey, shared_segment_size, IPC_CREAT | 0666);
     /* Attach the shared memory segment. */
-    shared_memory = (Keyboard *)shmat(segment_id, 0, 0);
+    shared_memory = (Data*)shmat(segment_id, 0, 0);
     printf("shared memory attached at address %p\n", shared_memory);
     /* Determine the segment's size. */
     shmctl(segment_id, IPC_STAT, &shmbuffer);
@@ -442,7 +453,7 @@ void pid_update()
     } else if (pitch_error_sum < -200.0) {
         pitch_error_sum = -200.0;
     }
-    printf("DesiredPitch: %f DesiredRoll: %f ActualPitch: %f DesiredRoll: %f\n", desired_pitch, desired_roll, pitch_angle, roll_angle);
+    // printf("DesiredPitch: %f DesiredRoll: %f ActualPitch: %f ActualRoll: %f ActualYaw: %f DesiredYaw: %f\n", desired_pitch, -desired_roll, pitch_angle, roll_angle, imu_data[2], desired_yaw);
 
     float roll_error = roll_angle - desired_roll;
     roll_error_sum += roll_error * Roll_I;
@@ -452,6 +463,8 @@ void pid_update()
     } else if (roll_error_sum < -200.0) {
         roll_error_sum = -200.0;
     }
+
+    float yaw_error = imu_data[2] - desired_yaw;
 
     float motor1 = THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + imu_data[2] * Yaw_P;
     float motor2 = THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - imu_data[2] * Yaw_P;
@@ -463,21 +476,21 @@ void pid_update()
     // printf("Pitch_Filter %f Pitch_Accel %f Pitch_Gyro %f Motor1 %f Motor2 %f\n", pitch_angle, pitch_accel, gyro_pitch, motor1, motor2);
 
     set_PWM(0,
-            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum + imu_data[2] * Yaw_P,
+            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum  + yaw_error * Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(2,
-            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum - imu_data[2] * Yaw_P,
+            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum - yaw_error * Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(1,
-            fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum - imu_data[2] * Yaw_P,
+            fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum - yaw_error * Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
-    set_PWM(3, fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum + imu_data[2] * Yaw_P,
+    set_PWM(3, fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum + yaw_error * Yaw_P,
                           PWM_MAX),
                     PWM_MIN));
 }
@@ -522,22 +535,14 @@ void safety_check()
         printf("Pitch angle is less than min pitch angle.");
     }
 
-    Keyboard keyboard = *shared_memory;
-    if (keyboard.key_press == ' ')
-    {
-        run_program = 0;
-        printf("Space key was pressed.");
-    }
+    Data joy_data = *shared_memory;
 
-    if (keyboard.heartbeat > last_heartbeat)
-    {
+    if (joy_data.sequence_num != joy_version){
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
         last_time = time_curr;
-        last_heartbeat = keyboard.heartbeat;
-    }
-    else if (keyboard.heartbeat == last_heartbeat)
-    {
+        joy_version = joy_data.sequence_num;
+    } else if (joy_data.sequence_num == joy_version) {
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
         float time_diff = time_curr - last_time;
@@ -549,67 +554,44 @@ void safety_check()
         if (time_diff > hb_timeout)
         {
             run_program = 0;
-            printf("Keyboard Timeout.");
+            printf("Joystick Timeout.");
         }
     }
+
+    if (joy_data.key1 == 1)
+    {
+        run_program = 0;
+        printf("Kill All!");
+    }
+
 }
 
 void keyboard_feedback()
 {
-    Keyboard keyboard = *shared_memory;
+    Data joy_data = *shared_memory;
 
     // printf("Key Pressed is %d\n", keyboard.key_press);
-    if (kb_version != keyboard.version)
-    {
-        kb_version = keyboard.version;
 
-        if (keyboard.key_press == 'u')
-        {
-            state = 'u';
-        }
-        else if (keyboard.key_press == 'p')
-        {
-            state = 'p';
-        }
-        else if (keyboard.key_press == 'c')
-        {
-            state = 'c';
-        }
-        else if (keyboard.key_press == '=')
-        {
-            THRUST += 10;
-            // printf("Thrust is %d\n", THRUST);
-        }
-        else if (keyboard.key_press == '-')
-        {
-            THRUST -= 10;
-            // printf("Thrust is %d\n", THRUST);
-        }
-        else if (keyboard.key_press == 'w')
-        {
-            // up arrow
-            desired_pitch += 0.5;
-            // printf("Pitch is %f\n", desired_pitch);
-        }
-        else if (keyboard.key_press == 's')
-        {
-            // down arrow
-            desired_pitch -= 0.5;
-            // printf("Pitch is %f\n", desired_pitch);
-        }
-        else if (keyboard.key_press == 'd')
-        {
-            // right arrow
-            desired_roll += 0.5;
-            // printf("Roll is %f\n", desired_roll);
-        }
-        else if (keyboard.key_press == 'a')
-        {
-            // left arrow
-            desired_roll -= 0.5;
-            // printf("Roll is %f\n", desired_roll);
-        }
+    if (joy_data.key0 == 1)
+    {
+        state = 'u';
     }
+    else if (joy_data.key2 == 1)
+    {
+        state = 'p';
+    }
+    else if (joy_data.key3 == 1)
+    {
+        state = 'c';
+    }
+
+    THRUST = (joy_data.thrust - 128) * -MAX_THRUST / 128 + NEUTRAL_PWM;
+    printf("Thrust is %d\n", THRUST);
+    desired_pitch = (joy_data.pitch - 127.0) * -10.0 / 128.0;
+    desired_roll = (joy_data.roll - 128.0) * -10.0 / 128.0;
+    desired_yaw = (joy_data.yaw - 127.0) * 90.0 / 128.0;
+    // yaw angle
+
 }
 
 int setup_imu()
@@ -649,9 +631,9 @@ int setup_imu()
 
         c = wiringPiI2CReadReg8(imu, CONFIG);
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x06); // 5hz
-        // wiringPiI2CWriteReg8(imu, CONFIG, 0x04); // 20hz
+        wiringPiI2CWriteReg8(imu, CONFIG, 0x04); // 20hz
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x03); // 41hz
-        wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz  
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz  
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x01); // 184hz 
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x00); // 250hz  
 
@@ -663,8 +645,8 @@ int setup_imu()
         // c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG2);
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c & ~0x0F); //
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c | 0x00);
-        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
-        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x04); // 20hz
+        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
+        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x04); // 20hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x03); // 41hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x02); // 92hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x00); // 460hz

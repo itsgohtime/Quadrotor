@@ -28,7 +28,7 @@ def plot_data(load_file, save_file, title, x, y):
 
     plt.figure(figsize=(10,10))
     plt.subplot(311)
-    for i in [1, 2, 3, 4]:
+    for i in [3, 4]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.title(title)
     plt.xlim([0, len(content)])
@@ -37,7 +37,7 @@ def plot_data(load_file, save_file, title, x, y):
     plt.legend()
     
     plt.subplot(312)
-    for i in [6, 7, 8, 9]:
+    for i in [8, 9]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.grid()
     plt.xlim([0, len(content)])
@@ -56,8 +56,8 @@ def plot_data(load_file, save_file, title, x, y):
     plt.savefig(save_file)
 
 plot_data(
-    load_file='week6_data/milestone2-1.txt',
-    save_file='week6_data/milestone2-1.png',
+    load_file='week7_data/tuning.txt',
+    save_file='week7_data/tuning.png',
     title="Milestone 2",
     x="t",
     y="")
