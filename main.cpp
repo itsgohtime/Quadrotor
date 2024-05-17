@@ -27,7 +27,7 @@
 #define max_pitch_angle 45
 #define hb_timeout 0.5
 
-#define PWM_MAX 1600
+#define PWM_MAX 1900
 #define PWM_MIN 1000
 #define frequency 25000000.0
 #define LED0 0x6
@@ -36,19 +36,19 @@
 #define LED0_OFF_L 0x8
 #define LED0_OFF_H 0x9
 #define LED_MULTIPLYER 4
-#define NEUTRAL_PWM 1350
+#define NEUTRAL_PWM 1500
 
-#define Pitch_P 13.5// 8
+#define Pitch_P 9.0// 8
 #define Pitch_I 0.03 // 0.03
-#define Pitch_D 1.2 // 1.5
+#define Pitch_D 1.3 // 1.5
 
-#define Roll_P 8.0 // 7
+#define Roll_P 9.0 // 7
 #define Roll_I 0.05 // 0.03
-#define Roll_D 1.1 // 1.4
+#define Roll_D 0.9 // 1.4
 
 #define Yaw_P 1.5
 
-#define MAX_THRUST 75
+#define MAX_THRUST 100
 
 enum Ascale
 {
@@ -159,7 +159,7 @@ int main(int argc, char *argv[])
         {
             read_imu();
             // printf("Gyro (xyz): %10.5f %10.5f %10.5f RP: %10.5f %10.5f \n", imu_data[0], imu_data[1], imu_data[2], roll_angle, pitch_angle);
-            update_filter(0.2);
+            update_filter(0.005);
             pid_update();
         }
         else if (state == 'p')
@@ -453,7 +453,7 @@ void pid_update()
     } else if (pitch_error_sum < -200.0) {
         pitch_error_sum = -200.0;
     }
-    // printf("DesiredPitch: %f DesiredRoll: %f ActualPitch: %f ActualRoll: %f ActualYaw: %f DesiredYaw: %f\n", desired_pitch, -desired_roll, pitch_angle, roll_angle, imu_data[2], desired_yaw);
+    printf("ActualPitch: %f ActualRoll: %f\n", pitch_angle, roll_angle);
 
     float roll_error = roll_angle - desired_roll;
     roll_error_sum += roll_error * Roll_I;
@@ -500,39 +500,39 @@ void safety_check()
     if (abs(imu_data[0]) > max_gyro_rate)
     {
         run_program = 0;
-        printf("X gyro rate is greater than 300");
+        printf("X gyro rate is greater than 300\n");
     }
     else if (abs(imu_data[1]) > max_gyro_rate)
     {
         run_program = 0;
-        printf("Y gyro rate is greater than 300");
+        printf("Y gyro rate is greater than 300\n");
     }
     else if (abs(imu_data[2]) > max_gyro_rate)
     {
         run_program = 0;
-        printf("Z gyro rate is greater than 300");
+        printf("Z gyro rate is greater than 300\n");
     }
 
     if (roll_angle > max_roll_angle)
     {
         run_program = 0;
-        printf("Roll angle is greater than max roll angle.");
+        printf("Roll angle is greater than max roll angle.\n");
     }
     else if (roll_angle < -max_roll_angle)
     {
         run_program = 0;
-        printf("Roll angle is less than min roll angle.");
+        printf("Roll angle is less than min roll angle.\n");
     }
 
     if (pitch_angle > max_pitch_angle)
     {
         run_program = 0;
-        printf("Pitch angle is greater than max pitch angle.");
+        printf("Pitch angle is greater than max pitch angle.\n");
     }
     else if (pitch_angle < -max_pitch_angle)
     {
         run_program = 0;
-        printf("Pitch angle is less than min pitch angle.");
+        printf("Pitch angle is less than min pitch angle.\n");
     }
 
     Data joy_data = *shared_memory;
@@ -561,7 +561,7 @@ void safety_check()
     if (joy_data.key1 == 1)
     {
         run_program = 0;
-        printf("Kill All!");
+        printf("Kill All!\n");
     }
 
 }
@@ -586,9 +586,9 @@ void keyboard_feedback()
     }
 
     THRUST = (joy_data.thrust - 128) * -MAX_THRUST / 128 + NEUTRAL_PWM;
-    printf("Thrust is %d\n", THRUST);
-    desired_pitch = (joy_data.pitch - 127.0) * -10.0 / 128.0;
-    desired_roll = (joy_data.roll - 128.0) * -10.0 / 128.0;
+    // printf("Thrust is %d\n", THRUST);
+    desired_pitch = (joy_data.pitch - 127.0) * -5.0 / 128.0;
+    desired_roll = (joy_data.roll - 128.0) * -5.0 / 128.0;
     desired_yaw = (joy_data.yaw - 127.0) * 90.0 / 128.0;
     // yaw angle
 
@@ -631,9 +631,9 @@ int setup_imu()
 
         c = wiringPiI2CReadReg8(imu, CONFIG);
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x06); // 5hz
-        wiringPiI2CWriteReg8(imu, CONFIG, 0x04); // 20hz
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x04); // 20hz
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x03); // 41hz
-        // wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz  
+        wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz  
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x01); // 184hz 
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x00); // 250hz  
 
@@ -645,9 +645,10 @@ int setup_imu()
         // c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG2);
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c & ~0x0F); //
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c | 0x00);
-        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
+        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
+        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x05); // 10hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x04); // 20hz
-        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x03); // 41hz
+        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x03); // 41hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x02); // 92hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x00); // 460hz
         c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG2);

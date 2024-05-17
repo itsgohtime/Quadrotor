@@ -27,28 +27,28 @@ def plot_data(load_file, save_file, title, x, y):
         data[9].append(float(split_l[1 + 2*9]))
 
     plt.figure(figsize=(10,10))
-    plt.subplot(311)
+    plt.subplot(211)
     for i in [3, 4]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.title(title)
     plt.xlim([0, len(content)])
-    plt.ylim([-10, 10])
+    plt.ylim([-12, 12])
     plt.grid()
     plt.legend()
     
-    plt.subplot(312)
+    plt.subplot(212)
     for i in [8, 9]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.grid()
     plt.xlim([0, len(content)])
-    plt.ylim([-10, 10])
+    plt.ylim([-12, 12])
     plt.legend()
 
-    plt.subplot(313)
-    for i in [0, 5]:
-        plt.plot(range(len(content)), data[i], label=labels[i])
-    plt.grid()
-    plt.legend()
+    # plt.subplot(313)
+    # for i in [0, 5]:
+    #     plt.plot(range(len(content)), data[i], label=labels[i])
+    # plt.grid()
+    # plt.legend()
 
     plt.xlabel(x)
     plt.ylabel(y)
