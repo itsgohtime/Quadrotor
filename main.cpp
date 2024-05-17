@@ -9,6 +9,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <curses.h>
+#include "vive.h"
 
 // gcc -o week1 week_1.cpp -lwiringPi -lncurses -lm
 
@@ -47,6 +48,7 @@
 #define Roll_D 0.9 // 1.4
 
 #define Yaw_P 1.5
+#define V_Yaw_P 100
 
 #define MAX_THRUST 100
 
@@ -68,6 +70,7 @@ enum Gscale
 
 int setup_imu();
 void calibrate_imu();
+void calibrate_vive();
 void read_imu();
 void update_filter(float A);
 void safety_check();
@@ -81,18 +84,28 @@ void set_PWM(uint8_t channel, float time_on_us);
 void keyboard_feedback();
 
 // global variables
+
+// imu variables
 int imu;
+float imu_data[6]; // gyro xyz, accel xyz
+
+// calibration variables
 float x_gyro_calibration = 0;
 float y_gyro_calibration = 0;
 float z_gyro_calibration = 0;
 float roll_calibration = 0;
 float pitch_calibration = 0;
 float accel_z_calibration = 0;
-float imu_data[6]; // gyro xyz, accel xyz
+
+float vive_x_calib;
+float vive_y_calib;
+
+// time variables
 long time_curr;
 long time_prev;
 struct timespec te;
 
+// cf variables
 float yaw = 0;
 float pitch_angle = 0;
 float roll_angle = 0;
@@ -103,19 +116,28 @@ float gyro_pitch = 0;
 float roll_accel = 0;
 float pitch_accel = 0;
 
+// keyboard variables
 int last_heartbeat = 0;
 long last_time = 0;
 int joy_version = -1;
 
-int pwm;
+// vive variables
+Position local_p;
+int vive_version = -1;
+long vive_lt = 0;
 
+// motor variables
+int pwm;
 int THRUST = 1250;
+
+// controller variables
 float desired_pitch = 0;
 float desired_roll = 0;
 float desired_yaw = 0;
 float pitch_error_sum;
 float roll_error_sum;
 
+// state variable
 char state = 'p';
 
 struct Data
@@ -138,8 +160,10 @@ FILE *fptr = fopen("week7_data/tuning.txt", "w");
 
 int main(int argc, char *argv[])
 {
+    init_shared_memory();
     setup_imu();
     calibrate_imu();
+    calibrate_vive();
     setup_keyboard();
     signal(SIGINT, &trap);
 
@@ -151,6 +175,8 @@ int main(int argc, char *argv[])
     delay(1000);
     while (run_program == 1)
     {
+
+        local_p = *position;
         keyboard_feedback();
         safety_check();
 
@@ -171,6 +197,7 @@ int main(int argc, char *argv[])
             printf("Calibrating\n");
             motors_off();
             calibrate_imu();
+            calibrate_vive();
         }
     }
     fclose(fptr);
@@ -316,6 +343,14 @@ void calibrate_imu()
     // printf("calibration complete, %f %f %f %f %f %f\n\r", x_gyro_calibration, y_gyro_calibration, z_gyro_calibration, roll_calibration, pitch_calibration, accel_z_calibration);
 }
 
+void calibrate_vive()
+{
+    local_p = *position;
+    vive_x_calib = local_p.x;
+    vive_y_calib = local_p.y;
+    printf("Vive calibration is {x: %0.2f, y: %0.2f}\n", vive_x_calib, vive_y_calib);
+}
+
 void read_imu()
 {
     // X acceleration
@@ -446,6 +481,8 @@ void pid_update()
 {
 
     fprintf(fptr, "Roll_DpS %f Roll_Integrated %f Roll_Accel %f Roll_CF %f Desired_Roll %f Pitch_DpS %f Pitch_Integrated %f Pitch_Accel %f Pitch_CF %f Desired_Pitch %f\n", imu_data[1], gyro_roll, roll_accel, roll_angle, desired_roll, imu_data[0], gyro_pitch, pitch_accel, pitch_angle, desired_pitch);
+   
+    // Pitch
     float pitch_error = pitch_angle - desired_pitch;
     pitch_error_sum += pitch_error * Pitch_I;
     if (pitch_error_sum > 200.0) {
@@ -453,44 +490,45 @@ void pid_update()
     } else if (pitch_error_sum < -200.0) {
         pitch_error_sum = -200.0;
     }
-    printf("ActualPitch: %f ActualRoll: %f\n", pitch_angle, roll_angle);
 
+    // Roll
     float roll_error = roll_angle - desired_roll;
     roll_error_sum += roll_error * Roll_I;
-
     if (roll_error_sum > 200.0) {
         roll_error_sum = 200.0;
     } else if (roll_error_sum < -200.0) {
         roll_error_sum = -200.0;
     }
 
+    // Yaw
     float yaw_error = imu_data[2] - desired_yaw;
 
-    float motor1 = THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + imu_data[2] * Yaw_P;
-    float motor2 = THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - imu_data[2] * Yaw_P;
+    // Motor controller values
+    float p_pitch = pitch_error * Pitch_P 
+    float d_pitch = imu_data[0] * Pitch_D;
 
-    // fprintf(fptr, "Actual %f Desired %f\n", roll_angle, desired_roll);
-    // fprintf(fptr, "YawRate %f Motor1 %f Motor2 %f\n", imu_data[2], motor1, motor2);
-    // printf("YawRate %f Motor1 %f Motor2 %f\n", imu_data[2], motor1, motor2);
-    // printf("PitchValue %f Gyro %f Motor1 %f Motor2 %f\n", pitch_angle, imu_data[0], motor1, motor2);
-    // printf("Pitch_Filter %f Pitch_Accel %f Pitch_Gyro %f Motor1 %f Motor2 %f\n", pitch_angle, pitch_accel, gyro_pitch, motor1, motor2);
+    float p_roll = roll_error * Roll_P;
+    float d_roll = imu_data[1] * Roll_D;
+
+    float p_yaw = yaw_error * Yaw_P;
+    float vive_yaw = local_p.yaw * V_Yaw_P;
 
     set_PWM(0,
-            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum  + yaw_error * Yaw_P,
+            fmax(fminf(THRUST + p_pitch + d_pitch + pitch_error_sum + p_roll + d_roll + roll_error_sum  + p_yaw + vive_yaw,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(2,
-            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum - yaw_error * Yaw_P,
+            fmax(fminf(THRUST + p_pitch + d_pitch + pitch_error_sum - p_roll - d_roll - roll_error_sum - p_yaw - vive_yaw,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(1,
-            fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum - yaw_error * Yaw_P,
+            fmax(fminf(THRUST - p_pitch - d_pitch - pitch_error_sum + p_roll + d_roll + roll_error_sum - p_yaw - vive_yaw,
                        PWM_MAX),
                  PWM_MIN));
 
-    set_PWM(3, fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum + yaw_error * Yaw_P,
+    set_PWM(3, fmax(fminf(THRUST - p_pitch - d_pitch - pitch_error_sum - p_roll - d_roll - roll_error_sum + p_yaw + vive_yaw,
                           PWM_MAX),
                     PWM_MIN));
 }
@@ -502,12 +540,14 @@ void safety_check()
         run_program = 0;
         printf("X gyro rate is greater than 300\n");
     }
-    else if (abs(imu_data[1]) > max_gyro_rate)
+    
+    if (abs(imu_data[1]) > max_gyro_rate)
     {
         run_program = 0;
         printf("Y gyro rate is greater than 300\n");
     }
-    else if (abs(imu_data[2]) > max_gyro_rate)
+    
+    if (abs(imu_data[2]) > max_gyro_rate)
     {
         run_program = 0;
         printf("Z gyro rate is greater than 300\n");
@@ -562,6 +602,39 @@ void safety_check()
     {
         run_program = 0;
         printf("Kill All!\n");
+    }
+
+    printf("Vive state  X: %0.2f, Y: %0.2f, Z: %0.2f, Th: %0.2f\n", local_p.x, local_p.y, local_p.z, local_p.yaw);
+
+    if (abs(local_p.x) > 1000) {
+        run_program = 0;
+        printf("Vive x position outside allowable range");
+    } 
+
+    if (abs(local_p.y) > 1000) {
+        run_program = 0;
+        printf("Vive y position outside allowable range");
+    }
+
+    if (local_p.version != vive_version) {
+        timespec_get(&te, TIME_UTC);
+        time_curr = te.tv_nsec;
+        vive_lt = time_curr;
+        vive_version = local_p.version;
+    } else if (local_p.version == vive_version) {
+        timespec_get(&te, TIME_UTC);
+        time_curr = te.tv_nsec;
+        float time_diff = time_curr - last_time;
+        if (time_diff <= 0)
+        {
+            time_diff += 1000000000;
+        }
+        time_diff = time_diff / 1000000000;
+        if (time_diff > hb_timeout)
+        {
+            run_program = 0;
+            printf("Vive Timeout.");
+        }
     }
 
 }
