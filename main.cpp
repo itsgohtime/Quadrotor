@@ -39,16 +39,21 @@
 #define LED_MULTIPLYER 4
 #define NEUTRAL_PWM 1400
 
-#define Pitch_P 9.0// 8
+#define Pitch_P 9.0  // 8
 #define Pitch_I 0.03 // 0.03
-#define Pitch_D 1.3 // 1.5
+#define Pitch_D 1.3  // 1.5
 
-#define Roll_P 9.0 // 7
+#define Roll_P 9.0  // 7
 #define Roll_I 0.05 // 0.03
-#define Roll_D 0.9 // 1.4
+#define Roll_D 0.9  // 1.4
 
 #define Yaw_P 0.0
 #define V_Yaw_P 200
+
+#define V_Pitch_P 0.5
+#define V_Pitch_D 0.5
+#define V_Roll_P 0.5
+#define V_Roll_D 0.5
 
 #define MAX_THRUST 100
 
@@ -123,6 +128,8 @@ int joy_version = -1;
 
 // vive variables
 Position local_p;
+Position prev_p;
+Position estimated_p;
 int vive_version = -1;
 long vive_lt = 0;
 
@@ -142,15 +149,15 @@ char state = 'p';
 
 struct Data
 {
-	int key0;
+    int key0;
     int key1;
     int key2;
     int key3;
-	int pitch;
-	int roll;
-	int yaw;
-	int thrust;
-  int sequence_num;
+    int pitch;
+    int roll;
+    int yaw;
+    int thrust;
+    int sequence_num;
 };
 
 Data *shared_memory;
@@ -298,7 +305,7 @@ void setup_keyboard()
     /* Allocate a shared memory segment. */
     segment_id = shmget(smhkey, shared_segment_size, IPC_CREAT | 0666);
     /* Attach the shared memory segment. */
-    shared_memory = (Data*)shmat(segment_id, 0, 0);
+    shared_memory = (Data *)shmat(segment_id, 0, 0);
     printf("shared memory attached at address %p\n", shared_memory);
     /* Determine the segment's size. */
     shmctl(segment_id, IPC_STAT, &shmbuffer);
@@ -477,26 +484,45 @@ void update_filter(float A)
     // printf("PITCH: Acceleration Angle: %f, Gyro Output: %f, Filtered Roll: %f\n\n", pitch_accel, gyro_pitch, pitch_angle);
 }
 
+void vive_control()
+{
+    estimated_p.x = estimated_p.x * 0.6 + local_p.x * 0.4;
+    estimated_p.y = estimated_p.y * 0.6 + local_p.y * 0.4;
+    estimated_p.z = estimated_p.z * 0.6 + local_p.z * 0.4;
+    estimated_p.yaw = estimated_p.yaw * 0.6 + local_p.yaw * 0.4;
+
+    desired_pitch = 0.5 * desired_pitch + 0.5 * V_Pitch_P * (estimated_p.y - vive_y_calib) + V_Pitch_D * (estimated_p.y - prev_p.y);
+    desired_roll = 0.5 * desired_roll + 0.5 * V_Roll_P * (estimated_p.x - vive_x_calib) + V_Roll_D * (estimated_p.x - prev_p.x);
+
+    prev_p = estimated_p;
+}
+
 void pid_update()
 {
 
     fprintf(fptr, "Roll_DpS %f Roll_Integrated %f Roll_Accel %f Roll_CF %f Desired_Roll %f Pitch_DpS %f Pitch_Integrated %f Pitch_Accel %f Pitch_CF %f Desired_Pitch %f\n", imu_data[1], gyro_roll, roll_accel, roll_angle, desired_roll, imu_data[0], gyro_pitch, pitch_accel, pitch_angle, desired_pitch);
-   
+
     // Pitch
     float pitch_error = pitch_angle - desired_pitch;
     pitch_error_sum += pitch_error * Pitch_I;
-    if (pitch_error_sum > 200.0) {
+    if (pitch_error_sum > 200.0)
+    {
         pitch_error_sum = 200.0;
-    } else if (pitch_error_sum < -200.0) {
+    }
+    else if (pitch_error_sum < -200.0)
+    {
         pitch_error_sum = -200.0;
     }
 
     // Roll
     float roll_error = roll_angle - desired_roll;
     roll_error_sum += roll_error * Roll_I;
-    if (roll_error_sum > 200.0) {
+    if (roll_error_sum > 200.0)
+    {
         roll_error_sum = 200.0;
-    } else if (roll_error_sum < -200.0) {
+    }
+    else if (roll_error_sum < -200.0)
+    {
         roll_error_sum = -200.0;
     }
 
@@ -504,7 +530,7 @@ void pid_update()
     float yaw_error = imu_data[2] - desired_yaw;
 
     set_PWM(0,
-            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum  + yaw_error * Yaw_P - local_p.yaw * V_Yaw_P,
+            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum + yaw_error * Yaw_P - local_p.yaw * V_Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
@@ -530,13 +556,13 @@ void safety_check()
         run_program = 0;
         printf("X gyro rate is greater than 300\n");
     }
-    
+
     if (abs(imu_data[1]) > max_gyro_rate)
     {
         run_program = 0;
         printf("Y gyro rate is greater than 300\n");
     }
-    
+
     if (abs(imu_data[2]) > max_gyro_rate)
     {
         run_program = 0;
@@ -567,12 +593,15 @@ void safety_check()
 
     Data joy_data = *shared_memory;
 
-    if (joy_data.sequence_num != joy_version){
+    if (joy_data.sequence_num != joy_version)
+    {
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
         last_time = time_curr;
         joy_version = joy_data.sequence_num;
-    } else if (joy_data.sequence_num == joy_version) {
+    }
+    else if (joy_data.sequence_num == joy_version)
+    {
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
         float time_diff = time_curr - last_time;
@@ -595,22 +624,27 @@ void safety_check()
     }
 
     printf("Vive state  X: %0.2f, Y: %0.2f, Z: %0.2f, Th: %0.2f\n", local_p.x, local_p.y, local_p.z, local_p.yaw);
-    if (abs(local_p.x) > 1000) {
+    if (abs(local_p.x) > 1000)
+    {
         run_program = 0;
         printf("Vive x position outside allowable range\n");
-    } 
+    }
 
-    if (abs(local_p.y) > 1000) {
+    if (abs(local_p.y) > 1000)
+    {
         run_program = 0;
         printf("Vive y position outside allowable range\n");
     }
 
-    if (local_p.version != vive_version) {
+    if (local_p.version != vive_version)
+    {
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
         vive_lt = time_curr;
         vive_version = local_p.version;
-    } else if (local_p.version == vive_version) {
+    }
+    else if (local_p.version == vive_version)
+    {
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
         float time_diff = time_curr - vive_lt;
@@ -625,7 +659,6 @@ void safety_check()
             printf("Vive Timeout.\n");
         }
     }
-
 }
 
 void keyboard_feedback()
@@ -653,7 +686,6 @@ void keyboard_feedback()
     desired_roll = (joy_data.roll - 128.0) * -5.0 / 128.0;
     desired_yaw = (joy_data.yaw - 127.0) * 90.0 / 128.0;
     // yaw angle
-
 }
 
 int setup_imu()
@@ -689,16 +721,14 @@ int setup_imu()
         wiringPiI2CWriteReg8(imu, GYRO_CONFIG, c | Gscale << 3);
         // c = wiringPiI2CReadReg8(imu, GYRO_CONFIG);
         // printf("gyro config %d\n", c);
-        
 
         c = wiringPiI2CReadReg8(imu, CONFIG);
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x06); // 5hz
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x04); // 20hz
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x03); // 41hz
-        wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz  
-        // wiringPiI2CWriteReg8(imu, CONFIG, 0x01); // 184hz 
-        // wiringPiI2CWriteReg8(imu, CONFIG, 0x00); // 250hz  
-
+        wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x01); // 184hz
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x00); // 250hz
 
         c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG);
         wiringPiI2CWriteReg8(imu, ACCEL_CONFIG, c & ~0xE0); // Clear self-test bits [7:5]
