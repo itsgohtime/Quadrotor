@@ -37,7 +37,7 @@
 #define LED0_OFF_L 0x8
 #define LED0_OFF_H 0x9
 #define LED_MULTIPLYER 4
-#define NEUTRAL_PWM 1500
+#define NEUTRAL_PWM 1400
 
 #define Pitch_P 9.0// 8
 #define Pitch_I 0.03 // 0.03
@@ -47,8 +47,8 @@
 #define Roll_I 0.05 // 0.03
 #define Roll_D 0.9 // 1.4
 
-#define Yaw_P 1.5
-#define V_Yaw_P 100
+#define Yaw_P 0.0
+#define V_Yaw_P 200
 
 #define MAX_THRUST 100
 
@@ -503,32 +503,22 @@ void pid_update()
     // Yaw
     float yaw_error = imu_data[2] - desired_yaw;
 
-    // Motor controller values
-    float p_pitch = pitch_error * Pitch_P 
-    float d_pitch = imu_data[0] * Pitch_D;
-
-    float p_roll = roll_error * Roll_P;
-    float d_roll = imu_data[1] * Roll_D;
-
-    float p_yaw = yaw_error * Yaw_P;
-    float vive_yaw = local_p.yaw * V_Yaw_P;
-
     set_PWM(0,
-            fmax(fminf(THRUST + p_pitch + d_pitch + pitch_error_sum + p_roll + d_roll + roll_error_sum  + p_yaw + vive_yaw,
+            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum  + yaw_error * Yaw_P - local_p.yaw * V_Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(2,
-            fmax(fminf(THRUST + p_pitch + d_pitch + pitch_error_sum - p_roll - d_roll - roll_error_sum - p_yaw - vive_yaw,
+            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum - yaw_error * Yaw_P + local_p.yaw * V_Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(1,
-            fmax(fminf(THRUST - p_pitch - d_pitch - pitch_error_sum + p_roll + d_roll + roll_error_sum - p_yaw - vive_yaw,
+            fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum - yaw_error * Yaw_P + local_p.yaw * V_Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
-    set_PWM(3, fmax(fminf(THRUST - p_pitch - d_pitch - pitch_error_sum - p_roll - d_roll - roll_error_sum + p_yaw + vive_yaw,
+    set_PWM(3, fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum + yaw_error * Yaw_P - local_p.yaw * V_Yaw_P,
                           PWM_MAX),
                     PWM_MIN));
 }
@@ -605,15 +595,14 @@ void safety_check()
     }
 
     printf("Vive state  X: %0.2f, Y: %0.2f, Z: %0.2f, Th: %0.2f\n", local_p.x, local_p.y, local_p.z, local_p.yaw);
-
     if (abs(local_p.x) > 1000) {
         run_program = 0;
-        printf("Vive x position outside allowable range");
+        printf("Vive x position outside allowable range\n");
     } 
 
     if (abs(local_p.y) > 1000) {
         run_program = 0;
-        printf("Vive y position outside allowable range");
+        printf("Vive y position outside allowable range\n");
     }
 
     if (local_p.version != vive_version) {
@@ -624,7 +613,7 @@ void safety_check()
     } else if (local_p.version == vive_version) {
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
-        float time_diff = time_curr - last_time;
+        float time_diff = time_curr - vive_lt;
         if (time_diff <= 0)
         {
             time_diff += 1000000000;
@@ -633,7 +622,7 @@ void safety_check()
         if (time_diff > hb_timeout)
         {
             run_program = 0;
-            printf("Vive Timeout.");
+            printf("Vive Timeout.\n");
         }
     }
 
