@@ -37,25 +37,25 @@
 #define LED0_OFF_L 0x8
 #define LED0_OFF_H 0x9
 #define LED_MULTIPLYER 4
-#define NEUTRAL_PWM 1400
+#define NEUTRAL_PWM 1500
 
 #define Pitch_P 9.0  // 8
 #define Pitch_I 0.03 // 0.03
-#define Pitch_D 1.3  // 1.5
+#define Pitch_D 1.2  // 1.5
 
 #define Roll_P 9.0  // 7
 #define Roll_I 0.05 // 0.03
-#define Roll_D 0.9  // 1.4
+#define Roll_D 0.8  // 1.4
 
 #define Yaw_P 0.0
 #define V_Yaw_P 200
 
-#define V_Pitch_P 0.5
-#define V_Pitch_D 0.5
-#define V_Roll_P 0.5
-#define V_Roll_D 0.5
+#define V_Pitch_P 0.02
+#define V_Pitch_D 0.002
+#define V_Roll_P 0.02
+#define V_Roll_D 0.002
 
-#define MAX_THRUST 100
+#define MAX_THRUST 150
 
 enum Ascale
 {
@@ -140,9 +140,13 @@ int THRUST = 1250;
 // controller variables
 float desired_pitch = 0;
 float desired_roll = 0;
+float desired_pitch_js = 0;
+float desired_roll_js = 0;
 float desired_yaw = 0;
 float pitch_error_sum;
 float roll_error_sum;
+float vive_d_y = 0.0;
+float vive_d_x = 0.0;
 
 // state variable
 char state = 'p';
@@ -163,7 +167,7 @@ struct Data
 Data *shared_memory;
 int run_program = 1;
 
-FILE *fptr = fopen("week7_data/tuning.txt", "w");
+FILE *fptr = fopen("week9_data/tuning.txt", "w");
 
 int main(int argc, char *argv[])
 {
@@ -355,7 +359,11 @@ void calibrate_vive()
     local_p = *position;
     vive_x_calib = local_p.x;
     vive_y_calib = local_p.y;
-    printf("Vive calibration is {x: %0.2f, y: %0.2f}\n", vive_x_calib, vive_y_calib);
+    printf("Vive calibration is {x: %0.2f, y: %0.2f}\n", vive_x_calib - vive_x_calib, vive_y_calib - vive_y_calib);
+    prev_p.x = 0.0;
+    prev_p.y = 0.0;
+    estimated_p.x = 0.0;
+    estimated_p.y = 0.0;
 }
 
 void read_imu()
@@ -439,7 +447,7 @@ void read_imu()
         vw = vw ^ 0xffff;
         vw = -vw - 1;
     }
-    imu_data[2] = vw * max_gyro / 32768.0 - z_gyro_calibration;
+    imu_data[2] = vw * max_gyro / 32768.0 - z_gyro_calibration;- vive_y_calib
     ;
 
     // Updates roll and pitch angle
@@ -486,22 +494,36 @@ void update_filter(float A)
 
 void vive_control()
 {
-    estimated_p.x = estimated_p.x * 0.6 + local_p.x * 0.4;
-    estimated_p.y = estimated_p.y * 0.6 + local_p.y * 0.4;
+    estimated_p.x = estimated_p.x * 0.6 + (local_p.x - vive_x_calib) * 0.4;
+    estimated_p.y = estimated_p.y * 0.6 + (local_p.y - vive_y_calib) * 0.4;
     estimated_p.z = estimated_p.z * 0.6 + local_p.z * 0.4;
     estimated_p.yaw = estimated_p.yaw * 0.6 + local_p.yaw * 0.4;
+    if (local_p.version != vive_version) {
+        vive_d_y = (estimated_p.y - prev_p.y);
+        vive_d_x = -(estimated_p.x - prev_p.x);
+        vive_version = local_p.version;
+    }
+    float desired_vive_pitch = V_Pitch_P * estimated_p.y + V_Pitch_D * vive_d_y;
+    float desired_vive_roll = V_Roll_P * estimated_p.x + V_Roll_D * vive_d_x;
 
-    desired_pitch = 0.5 * desired_pitch + 0.5 * V_Pitch_P * (estimated_p.y - vive_y_calib) + V_Pitch_D * (estimated_p.y - prev_p.y);
-    desired_roll = 0.5 * desired_roll + 0.5 * V_Roll_P * (estimated_p.x - vive_x_calib) + V_Roll_D * (estimated_p.x - prev_p.x);
+    // Autoatmion 
+    desired_pitch = 0.5 * desired_pitch_js + 0.5 * desired_vive_pitch;
+    desired_roll = 0.5 * desired_roll_js + 0.5 * desired_vive_roll;
+
+    printf("Error {%0.2f, %0.2f}, Desired_Pitch %0.2f, Desired Roll %0.2f\n\n", estimated_p.x, estimated_p.y, desired_pitch, desired_roll);
 
     prev_p = estimated_p;
+
 }
 
 void pid_update()
 {
 
-    fprintf(fptr, "Roll_DpS %f Roll_Integrated %f Roll_Accel %f Roll_CF %f Desired_Roll %f Pitch_DpS %f Pitch_Integrated %f Pitch_Accel %f Pitch_CF %f Desired_Pitch %f\n", imu_data[1], gyro_roll, roll_accel, roll_angle, desired_roll, imu_data[0], gyro_pitch, pitch_accel, pitch_angle, desired_pitch);
 
+    printf("Actual pitch %0.2f Actual roll %0.2f\n", pitch_angle, roll_angle);
+    vive_control();
+
+    fprintf(fptr, "Roll_DpS %f Roll_Integrated %f Roll_Accel %f Roll_CF %f Desired_Roll %f Pitch_DpS %f Pitch_Integrated %f Pitch_Accel %f Pitch_CF %f Desired_Pitch %f\n", imu_data[1], gyro_roll, roll_accel, roll_angle, desired_roll, imu_data[0], gyro_pitch, pitch_accel, pitch_angle, desired_pitch);
     // Pitch
     float pitch_error = pitch_angle - desired_pitch;
     pitch_error_sum += pitch_error * Pitch_I;
@@ -529,22 +551,29 @@ void pid_update()
     // Yaw
     float yaw_error = imu_data[2] - desired_yaw;
 
+    float p_pt = pitch_error * Pitch_P; // pitch proportional term
+    float p_dt = imu_data[0] * Pitch_D;
+    float r_pt = roll_error * Roll_P;
+    float r_dt = imu_data[1] * Roll_D;
+    float y_pt = yaw_error * Yaw_P;
+    float vy_pt = local_p.yaw * V_Yaw_P;
+    
     set_PWM(0,
-            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum + yaw_error * Yaw_P - local_p.yaw * V_Yaw_P,
+            fmax(fminf(THRUST + p_pt + p_dt + pitch_error_sum + r_pt + r_dt + roll_error_sum + y_pt - vy_pt,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(2,
-            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum - yaw_error * Yaw_P + local_p.yaw * V_Yaw_P,
+            fmax(fminf(THRUST + p_pt + p_dt + pitch_error_sum - r_pt - r_dt - roll_error_sum - y_pt + vy_pt,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(1,
-            fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum - yaw_error * Yaw_P + local_p.yaw * V_Yaw_P,
+            fmax(fminf(THRUST - p_pt - p_dt - pitch_error_sum + r_pt + r_dt + roll_error_sum - y_pt + vy_pt,
                        PWM_MAX),
                  PWM_MIN));
 
-    set_PWM(3, fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum + yaw_error * Yaw_P - local_p.yaw * V_Yaw_P,
+    set_PWM(3, fmax(fminf(THRUST - p_pt - p_dt - pitch_error_sum - r_pt - r_dt - roll_error_sum + y_pt - vy_pt,
                           PWM_MAX),
                     PWM_MIN));
 }
@@ -623,14 +652,14 @@ void safety_check()
         printf("Kill All!\n");
     }
 
-    printf("Vive state  X: %0.2f, Y: %0.2f, Z: %0.2f, Th: %0.2f\n", local_p.x, local_p.y, local_p.z, local_p.yaw);
-    if (abs(local_p.x) > 1000)
+    // printf("Vive state  X: %0.2f, Y: %0.2f\n", local_p.x - vive_x_calib, local_p.y - vive_y_calib);
+    if (abs(local_p.x - vive_x_calib) > 1000)
     {
         run_program = 0;
         printf("Vive x position outside allowable range\n");
     }
 
-    if (abs(local_p.y) > 1000)
+    if (abs(local_p.y - vive_y_calib) > 1000)  
     {
         run_program = 0;
         printf("Vive y position outside allowable range\n");
@@ -641,7 +670,6 @@ void safety_check()
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
         vive_lt = time_curr;
-        vive_version = local_p.version;
     }
     else if (local_p.version == vive_version)
     {
@@ -682,8 +710,8 @@ void keyboard_feedback()
 
     THRUST = (joy_data.thrust - 128) * -MAX_THRUST / 128 + NEUTRAL_PWM;
     // printf("Thrust is %d\n", THRUST);
-    desired_pitch = (joy_data.pitch - 127.0) * -5.0 / 128.0;
-    desired_roll = (joy_data.roll - 128.0) * -5.0 / 128.0;
+    desired_pitch_js = (joy_data.pitch - 127.0) * -5.0 / 128.0;
+    desired_roll_js = (joy_data.roll - 128.0) * -5.0 / 128.0;
     desired_yaw = (joy_data.yaw - 127.0) * 90.0 / 128.0;
     // yaw angle
 }

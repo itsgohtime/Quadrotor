@@ -56,8 +56,8 @@ def plot_data(load_file, save_file, title, x, y):
     plt.savefig(save_file)
 
 plot_data(
-    load_file='week7_data/tuning.txt',
-    save_file='week7_data/tuning.png',
+    load_file='week9_data/tuning.txt',
+    save_file='week9_data/tuning.png',
     title="Milestone 2",
     x="t",
     y="")
