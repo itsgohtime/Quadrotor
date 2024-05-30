@@ -551,7 +551,7 @@ void pid_update()
     }
 
     // Yaw
-    float yaw_error = imu_data[2] - desired_yaw;
+    float yaw_error = local_p.yaw - desired_yaw;
 
     float p_pt = pitch_error * Pitch_P; // pitch proportional term
     float p_dt = imu_data[0] * Pitch_D;
