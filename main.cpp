@@ -41,19 +41,19 @@
 
 #define Pitch_P 9.0  // 8
 #define Pitch_I 0.03 // 0.03
-#define Pitch_D 1.2  // 1.5
+#define Pitch_D 1.0  // 1.5
 
-#define Roll_P 9.0  // 7
+#define Roll_P 9.5  // 7
 #define Roll_I 0.05 // 0.03
 #define Roll_D 0.8  // 1.4
 
 #define Yaw_P 0.0
 #define V_Yaw_P 200
 
-#define V_Pitch_P 0.02
-#define V_Pitch_D 0.002
-#define V_Roll_P 0.02
-#define V_Roll_D 0.002
+#define V_Pitch_P 0.04
+#define V_Pitch_D 0.1
+#define V_Roll_P 0.03
+#define V_Roll_D 0.1
 
 #define MAX_THRUST 150
 
@@ -447,8 +447,8 @@ void read_imu()
         vw = vw ^ 0xffff;
         vw = -vw - 1;
     }
-    imu_data[2] = vw * max_gyro / 32768.0 - z_gyro_calibration;- vive_y_calib
-    ;
+    imu_data[2] = vw * max_gyro / 32768.0 - z_gyro_calibration;
+    -vive_y_calib;
 
     // Updates roll and pitch angle
     roll_angle = atan2(imu_data[3], -imu_data[5]);
@@ -498,27 +498,29 @@ void vive_control()
     estimated_p.y = estimated_p.y * 0.6 + (local_p.y - vive_y_calib) * 0.4;
     estimated_p.z = estimated_p.z * 0.6 + local_p.z * 0.4;
     estimated_p.yaw = estimated_p.yaw * 0.6 + local_p.yaw * 0.4;
-    if (local_p.version != vive_version) {
+    if (local_p.version != vive_version)
+    {
         vive_d_y = (estimated_p.y - prev_p.y);
-        vive_d_x = -(estimated_p.x - prev_p.x);
+        vive_d_x = (estimated_p.x - prev_p.x);
         vive_version = local_p.version;
     }
-    float desired_vive_pitch = V_Pitch_P * estimated_p.y + V_Pitch_D * vive_d_y;
-    float desired_vive_roll = V_Roll_P * estimated_p.x + V_Roll_D * vive_d_x;
+    float desired_vive_pitch = V_Pitch_P * estimated_p.y - V_Pitch_D * vive_d_y;
+    float desired_vive_roll = V_Roll_P * estimated_p.x - V_Roll_D * vive_d_x;
 
-    // Autoatmion 
+    // Autoatmion
     desired_pitch = 0.5 * desired_pitch_js + 0.5 * desired_vive_pitch;
     desired_roll = 0.5 * desired_roll_js + 0.5 * desired_vive_roll;
 
-    printf("Error {%0.2f, %0.2f}, Desired_Pitch %0.2f, Desired Roll %0.2f\n\n", estimated_p.x, estimated_p.y, desired_pitch, desired_roll);
+    printf("Vive dy %0.2f, Vive dx %0.2f\n", vive_d_y, vive_d_x);
+    printf("Error {%0.2f, %0.2f}, Desired_Pitch %0.2f, Desired Roll %0.2f\n\n", estimated_p.y, estimated_p.x, desired_pitch, desired_roll);
+
+    // printf("Joystick pitch and roll {%0.2f, %0.2f}", desired_pitch_js, desired_roll_js);
 
     prev_p = estimated_p;
-
 }
 
 void pid_update()
 {
-
 
     printf("Actual pitch %0.2f Actual roll %0.2f\n", pitch_angle, roll_angle);
     vive_control();
@@ -557,7 +559,7 @@ void pid_update()
     float r_dt = imu_data[1] * Roll_D;
     float y_pt = yaw_error * Yaw_P;
     float vy_pt = local_p.yaw * V_Yaw_P;
-    
+
     set_PWM(0,
             fmax(fminf(THRUST + p_pt + p_dt + pitch_error_sum + r_pt + r_dt + roll_error_sum + y_pt - vy_pt,
                        PWM_MAX),
@@ -659,7 +661,7 @@ void safety_check()
         printf("Vive x position outside allowable range\n");
     }
 
-    if (abs(local_p.y - vive_y_calib) > 1000)  
+    if (abs(local_p.y - vive_y_calib) > 1000)
     {
         run_program = 0;
         printf("Vive y position outside allowable range\n");
