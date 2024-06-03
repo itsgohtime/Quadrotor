@@ -39,20 +39,20 @@
 #define LED_MULTIPLYER 4
 #define NEUTRAL_PWM 1500
 
-#define Pitch_P 9.0  // 8
+#define Pitch_P 9.0// 8
 #define Pitch_I 0.03 // 0.03
-#define Pitch_D 1.0  // 1.5
+#define Pitch_D 1.3 // 1.5
 
-#define Roll_P 9.5  // 7
-#define Roll_I 0.05 // 0.03
-#define Roll_D 0.8  // 1.4
+#define Roll_P 9.0 // 7
+#define Roll_I 0.03 // 0.03
+#define Roll_D 0.9  //1.4
 
-#define Yaw_P 0.0
+#define Yaw_P 1.5
 #define V_Yaw_P 200
 
-#define V_Pitch_P 0.04
+#define V_Pitch_P 0.01
 #define V_Pitch_D 0.1
-#define V_Roll_P 0.03
+#define V_Roll_P 0.01
 #define V_Roll_D 0.1
 
 #define MAX_THRUST 150
@@ -496,23 +496,30 @@ void vive_control()
 {
     estimated_p.x = estimated_p.x * 0.6 + (local_p.x - vive_x_calib) * 0.4;
     estimated_p.y = estimated_p.y * 0.6 + (local_p.y - vive_y_calib) * 0.4;
-    estimated_p.z = estimated_p.z * 0.6 + local_p.z * 0.4;
-    estimated_p.yaw = estimated_p.yaw * 0.6 + local_p.yaw * 0.4;
-    if (local_p.version != vive_version)
+    // fprintf(fptr, "VIVEY %0.2f VIVEX %0.2f ESTIMATEY %0.2f ESTIMATEX %0.2f\n", local_p.y - vive_y_calib, local_p.x - vive_x_calib, estimated_p.y, estimated_p.x);
+    
+    timespec_get(&te, TIME_UTC);
+    time_curr = te.tv_nsec;
+    float time_diff = time_curr - vive_lt;
+    if (time_diff <= 0)
     {
-        vive_d_y = (estimated_p.y - prev_p.y);
-        vive_d_x = (estimated_p.x - prev_p.x);
-        vive_version = local_p.version;
+        time_diff += 1000000000;
     }
+    time_diff = time_diff / 1000;
+
+    vive_d_y = (estimated_p.y - prev_p.y) / time_diff;
+    vive_d_x = (estimated_p.x - prev_p.x) / time_diff;
+    vive_version = local_p.version;
+
     float desired_vive_pitch = V_Pitch_P * estimated_p.y - V_Pitch_D * vive_d_y;
     float desired_vive_roll = V_Roll_P * estimated_p.x - V_Roll_D * vive_d_x;
 
-    // Autoatmion
+    // Automation
     desired_pitch = 0.5 * desired_pitch_js + 0.5 * desired_vive_pitch;
     desired_roll = 0.5 * desired_roll_js + 0.5 * desired_vive_roll;
 
-    printf("Vive dy %0.2f, Vive dx %0.2f\n", vive_d_y, vive_d_x);
-    printf("Error {%0.2f, %0.2f}, Desired_Pitch %0.2f, Desired Roll %0.2f\n\n", estimated_p.y, estimated_p.x, desired_pitch, desired_roll);
+    // printf("Vive dy %0.2f, Vive dx %0.2f\n", vive_d_y, vive_d_x);
+    // printf("Error {%0.2f, %0.2f}, Desired_Pitch %0.2f, Desired Roll %0.2f\n\n", estimated_p.y, estimated_p.x, desired_pitch, desired_roll);
 
     // printf("Joystick pitch and roll {%0.2f, %0.2f}", desired_pitch_js, desired_roll_js);
 
@@ -522,10 +529,11 @@ void vive_control()
 void pid_update()
 {
 
-    printf("Actual pitch %0.2f Actual roll %0.2f\n", pitch_angle, roll_angle);
-    vive_control();
+    // printf("Actual pitch %0.2f Actual roll %0.2f\n", pitch_angle, roll_angle);
+    // vive_control();
 
-    fprintf(fptr, "Roll_DpS %f Roll_Integrated %f Roll_Accel %f Roll_CF %f Desired_Roll %f Pitch_DpS %f Pitch_Integrated %f Pitch_Accel %f Pitch_CF %f Desired_Pitch %f\n", imu_data[1], gyro_roll, roll_accel, roll_angle, desired_roll, imu_data[0], gyro_pitch, pitch_accel, pitch_angle, desired_pitch);
+    fprintf(fptr, "Desired_Pitch %0.2f Actual_Pitch %0.2f EstimatedPY %0.2f VivprintfeDY %0.2f Desired_Roll %0.2f Actual_Roll %0.2f EstimatedPX %0.2f ViveDX %0.2f\n",
+        desired_pitch, pitch_angle, estimated_p.y, vive_d_y, desired_roll, roll_angle, estimated_p.x, vive_d_x);
     // Pitch
     float pitch_error = pitch_angle - desired_pitch;
     pitch_error_sum += pitch_error * Pitch_I;
@@ -551,33 +559,27 @@ void pid_update()
     }
 
     // Yaw
-    float yaw_error = local_p.yaw - desired_yaw;
-
-    float p_pt = pitch_error * Pitch_P; // pitch proportional term
-    float p_dt = imu_data[0] * Pitch_D;
-    float r_pt = roll_error * Roll_P;
-    float r_dt = imu_data[1] * Roll_D;
-    float y_pt = yaw_error * Yaw_P;
-    float vy_pt = local_p.yaw * V_Yaw_P;
+    float desired_yaw_rate = V_Yaw_P * local_p.yaw;
+    float yaw_error = imu_data[2] - desired_yaw_rate;
 
     set_PWM(0,
-            fmax(fminf(THRUST + p_pt + p_dt + pitch_error_sum + r_pt + r_dt + roll_error_sum + y_pt - vy_pt,
+            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum  + yaw_error * Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(2,
-            fmax(fminf(THRUST + p_pt + p_dt + pitch_error_sum - r_pt - r_dt - roll_error_sum - y_pt + vy_pt,
+            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum - yaw_error * Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
     set_PWM(1,
-            fmax(fminf(THRUST - p_pt - p_dt - pitch_error_sum + r_pt + r_dt + roll_error_sum - y_pt + vy_pt,
+            fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum - yaw_error * Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
-    set_PWM(3, fmax(fminf(THRUST - p_pt - p_dt - pitch_error_sum - r_pt - r_dt - roll_error_sum + y_pt - vy_pt,
+    set_PWM(3, fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum + yaw_error * Yaw_P,
                           PWM_MAX),
-                    PWM_MIN));
+                    PWM_MIN));  
 }
 
 void safety_check()
@@ -672,6 +674,7 @@ void safety_check()
         timespec_get(&te, TIME_UTC);
         time_curr = te.tv_nsec;
         vive_lt = time_curr;
+        vive_control();
     }
     else if (local_p.version == vive_version)
     {

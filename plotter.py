@@ -23,26 +23,46 @@ def plot_data(load_file, save_file, title, x, y):
         data[5].append(float(split_l[1 + 2*5]))
         data[6].append(float(split_l[1 + 2*6]))
         data[7].append(float(split_l[1 + 2*7]))
-        data[8].append(float(split_l[1 + 2*8]))
-        data[9].append(float(split_l[1 + 2*9]))
 
-    plt.figure(figsize=(10,10))
-    plt.subplot(211)
-    for i in [3, 4]:
+    plt.figure(figsize=(10, 30))
+    plt.subplot(411)
+    for i in [0, 1]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.title(title)
     plt.xlim([0, len(content)])
-    plt.ylim([-12, 12])
+    # plt.ylim([-12, 12])
+    plt.grid()
+    plt.legend()
+
+    plt.subplot(412)
+    for i in [2]:
+        plt.plot(range(len(content)), data[i], label=labels[i])
+    plt.title(title)
+    plt.xlim([0, len(content)])
+    # plt.ylim([-12, 12])
     plt.grid()
     plt.legend()
     
-    plt.subplot(212)
-    for i in [8, 9]:
+    
+    plt.subplot(413)
+    for i in [4, 5]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.grid()
     plt.xlim([0, len(content)])
-    plt.ylim([-12, 12])
+    # plt.ylim([-12, 12])
     plt.legend()
+
+    plt.subplot(414)
+    for i in [6, 7]:
+        plt.plot(range(len(content)), data[i], label=labels[i])
+    plt.title(title)
+    plt.xlim([0, len(content)])
+    # plt.ylim([-12, 12])
+    plt.grid()
+    plt.legend()
+    
+
+
 
     # plt.subplot(313)
     # for i in [0, 5]:
@@ -56,8 +76,8 @@ def plot_data(load_file, save_file, title, x, y):
     plt.savefig(save_file)
 
 plot_data(
-    load_file='week9_data/tuning4.txt',
-    save_file='week9_data/tuning4.png',
+    load_file='week10_data/tuning.txt',
+    save_file='week10_data/tuning.png',
     title="tuning",
     x="t",
     y="")
