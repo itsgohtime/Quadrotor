@@ -35,7 +35,7 @@ def plot_data(load_file, save_file, title, x, y):
     plt.legend()
 
     plt.subplot(412)
-    for i in [2]:
+    for i in [2, 3]:
         plt.plot(range(len(content)), data[i], label=labels[i])
     plt.title(title)
     plt.xlim([0, len(content)])

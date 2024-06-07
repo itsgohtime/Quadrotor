@@ -39,21 +39,21 @@
 #define LED_MULTIPLYER 4
 #define NEUTRAL_PWM 1500
 
-#define Pitch_P 9.0// 8
+#define Pitch_P 4.0// 8
 #define Pitch_I 0.03 // 0.03
-#define Pitch_D 1.3 // 1.5
+#define Pitch_D 1.0 // 1.5
 
 #define Roll_P 9.0 // 7
 #define Roll_I 0.03 // 0.03
-#define Roll_D 0.9  //1.4
+#define Roll_D 1.0  //1.4
 
 #define Yaw_P 1.5
 #define V_Yaw_P 200
 
-#define V_Pitch_P 0.01
-#define V_Pitch_D 0.1
-#define V_Roll_P 0.01
-#define V_Roll_D 0.1
+#define V_Pitch_P 0.03
+#define V_Pitch_D 0.02 // 0.2
+#define V_Roll_P 0.03
+#define V_Roll_D 0.02 // 0.2
 
 #define MAX_THRUST 150
 
@@ -657,17 +657,17 @@ void safety_check()
     }
 
     // printf("Vive state  X: %0.2f, Y: %0.2f\n", local_p.x - vive_x_calib, local_p.y - vive_y_calib);
-    if (abs(local_p.x - vive_x_calib) > 1000)
-    {
-        run_program = 0;
-        printf("Vive x position outside allowable range\n");
-    }
+    // if (abs(local_p.x - vive_x_calib) > 1000)
+    // {
+    //     run_program = 0;
+    //     printf("Vive x position outside allowable range\n");
+    // }
 
-    if (abs(local_p.y - vive_y_calib) > 1000)
-    {
-        run_program = 0;
-        printf("Vive y position outside allowable range\n");
-    }
+    // if (abs(local_p.y - vive_y_calib) > 1000)
+    // {
+    //     run_program = 0;
+    //     printf("Vive y position outside allowable range\n");
+    // }
 
     if (local_p.version != vive_version)
     {
@@ -758,8 +758,8 @@ int setup_imu()
         c = wiringPiI2CReadReg8(imu, CONFIG);
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x06); // 5hz
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x04); // 20hz
-        // wiringPiI2CWriteReg8(imu, CONFIG, 0x03); // 41hz
-        wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz
+        wiringPiI2CWriteReg8(imu, CONFIG, 0x03); // 41hz
+        // wiringPiI2CWriteReg8(imu, CONFIG, 0x02); // 92hz
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x01); // 184hz
         // wiringPiI2CWriteReg8(imu, CONFIG, 0x00); // 250hz
 
@@ -772,8 +772,8 @@ int setup_imu()
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, c | 0x00);
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x06); // 5hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x05); // 10hz
-        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x04); // 20hz
-        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x03); // 41hz
+        wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x04); // 20hz
+        // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x03); // 41hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x02); // 92hz
         // wiringPiI2CWriteReg8(imu, ACCEL_CONFIG2, 0x00); // 460hz
         c = wiringPiI2CReadReg8(imu, ACCEL_CONFIG2);
