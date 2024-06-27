@@ -43,9 +43,10 @@
 #define Pitch_I 0.03 // 0.03
 #define Pitch_D 1.0 // 1.5
 
-#define Roll_P 9.0 // 7
+#define Roll_P 9.0  // 7
 #define Roll_I 0.03 // 0.03
 #define Roll_D 1.0  //1.4
+#define Roll_D 0.9  // 1.4
 
 #define Yaw_P 1.5
 #define V_Yaw_P 200
@@ -167,7 +168,7 @@ struct Data
 Data *shared_memory;
 int run_program = 1;
 
-FILE *fptr = fopen("week9_data/tuning.txt", "w");
+FILE *fptr = fopen("week10_data/tuning.txt", "w");
 
 int main(int argc, char *argv[])
 {
@@ -497,7 +498,7 @@ void vive_control()
     estimated_p.x = estimated_p.x * 0.6 + (local_p.x - vive_x_calib) * 0.4;
     estimated_p.y = estimated_p.y * 0.6 + (local_p.y - vive_y_calib) * 0.4;
     // fprintf(fptr, "VIVEY %0.2f VIVEX %0.2f ESTIMATEY %0.2f ESTIMATEX %0.2f\n", local_p.y - vive_y_calib, local_p.x - vive_x_calib, estimated_p.y, estimated_p.x);
-    
+
     timespec_get(&te, TIME_UTC);
     time_curr = te.tv_nsec;
     float time_diff = time_curr - vive_lt;
@@ -533,7 +534,7 @@ void pid_update()
     // vive_control();
 
     fprintf(fptr, "Desired_Pitch %0.2f Actual_Pitch %0.2f EstimatedPY %0.2f VivprintfeDY %0.2f Desired_Roll %0.2f Actual_Roll %0.2f EstimatedPX %0.2f ViveDX %0.2f\n",
-        desired_pitch, pitch_angle, estimated_p.y, vive_d_y, desired_roll, roll_angle, estimated_p.x, vive_d_x);
+            desired_pitch, pitch_angle, estimated_p.y, vive_d_y, desired_roll, roll_angle, estimated_p.x, vive_d_x);
     // Pitch
     float pitch_error = pitch_angle - desired_pitch;
     pitch_error_sum += pitch_error * Pitch_I;
@@ -563,7 +564,7 @@ void pid_update()
     float yaw_error = imu_data[2] - desired_yaw_rate;
 
     set_PWM(0,
-            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum  + yaw_error * Yaw_P,
+            fmax(fminf(THRUST + pitch_error * Pitch_P + imu_data[0] * Pitch_D + pitch_error_sum + roll_error * Roll_P + imu_data[1] * Roll_D + roll_error_sum + yaw_error * Yaw_P,
                        PWM_MAX),
                  PWM_MIN));
 
@@ -579,7 +580,7 @@ void pid_update()
 
     set_PWM(3, fmax(fminf(THRUST - pitch_error * Pitch_P - imu_data[0] * Pitch_D - pitch_error_sum - roll_error * Roll_P - imu_data[1] * Roll_D - roll_error_sum + yaw_error * Yaw_P,
                           PWM_MAX),
-                    PWM_MIN));  
+                    PWM_MIN));
 }
 
 void safety_check()
